@@ -4,86 +4,69 @@ import torch.nn.functional as F
 
 
 class Encoder(nn.Module):
-    def __init__(self):
+    def __init__(self, in_channels=1, latent_sizes=[32,64,128,256,512]):	
         super().__init__()
 
-        self.initial = nn.Conv2d(in_channels=3, out_channels=32,  kernel_size=3, stride=1, padding=1)
+        self.initial = nn.Conv2d(in_channels=in_channels, out_channels=latent_sizes[0],  kernel_size=3, stride=1, padding=1)
         self.act = nn.GELU()
 
+        self.downs = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels=latent_sizes[i], out_channels=latent_sizes[i]*2,  kernel_size=3, stride=1, padding=1),
+                    self.act,
+                    nn.MaxPool2d(2)
+                )
+                for i in range(len(latent_sizes)-1)
+            ]
 
-        #TODO: Make this isto a function or loop
-        self.d1 = nn.Sequential(
-            nn.Conv2d(in_channels=32, out_channels=64,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.MaxPool2d(2)
-        )
-
-        self.d2 = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=128,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.MaxPool2d(2)
-        )
-
-        self.d3 = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=256,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.MaxPool2d(2)
-        )
-
-        self.d4 = nn.Sequential(
-            nn.Conv2d(in_channels=256, out_channels=512,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.MaxPool2d(2)
-        )
+        )	
 
 
 
     def forward(self, x):
         x = self.initial(x)
-        x = self.d1(x)
-        x = self.d2(x)
-        x = self.d3(x)
-        x = self.d4(x)
+        for d in self.downs:
+            x = d(x)
         return x
 
 
 class Decoder(nn.Module):
-    def __init__(self):
+    def __init__(self, out_channels=1, latent_sizes=[512,256,128,64,32]):
         super().__init__()
-        self.last = nn.Conv2d(in_channels=32, out_channels=3,  kernel_size=3, stride=1, padding=1)
+        self.last = nn.Conv2d(in_channels=latent_sizes[-1], out_channels=out_channels,  kernel_size=3, stride=1, padding=1)
         self.act = nn.GELU()
 
-        #TODO: Make this into a function or loop
+        self.ups = nn.ModuleList(
+            [
+                nn.Sequential(
+                    nn.Conv2d(in_channels=latent_sizes[i], out_channels=latent_sizes[i]//2,  kernel_size=3, stride=1, padding=1),
+                    self.act,
+                    nn.Upsample(scale_factor=2)
+                )
+                for i in range(len(latent_sizes)-1)
+            ]
 
-        self.u1 = nn.Sequential(
-            nn.Conv2d(in_channels=512, out_channels=256,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.Upsample(scale_factor=2)
-        )
-
-        self.u2 = nn.Sequential(
-            nn.Conv2d(in_channels=256, out_channels=128,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.Upsample(scale_factor=2)
-        )
-
-        self.u3 = nn.Sequential(
-            nn.Conv2d(in_channels=128, out_channels=64,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.Upsample(scale_factor=2)
-        )
-
-        self.u4 = nn.Sequential(
-            nn.Conv2d(in_channels=64, out_channels=32,  kernel_size=3, stride=1, padding=1),
-            self.act,
-            nn.Upsample(scale_factor=2)
         )
 
 
     def forward(self, x):
-        x = self.u1(x)
-        x = self.u2(x)
-        x = self.u3(x)
-        x = self.u4(x)
+        for u in self.ups:
+            x = u(x)
         x = self.last(x)
+        return x
+    
+
+class VAE(nn.Module):
+    def __init__(self, in_channels=1, latent_sizes=[32,64,128,256,512]):	
+        super().__init__()
+
+        self.encoder = Encoder(in_channels=in_channels, latent_sizes=latent_sizes)
+        self.decoder = Decoder(out_channels=in_channels, latent_sizes=latent_sizes)
+
+
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.decoder(x)
         return x
